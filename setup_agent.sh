@@ -44,21 +44,20 @@ echo "Installation des dépendances (Docker, PM2, OpenSSH Client)..."
 
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     # Définir le frontend non-interactif pour toutes les opérations apt-get
-    # Cela reste crucial, même si Dokku contourne certaines parties, c'est la base.
     export DEBIAN_FRONTEND=noninteractive
-
-    # On ne fait pas de 'apt-get update' global tout de suite pour éviter de "réveiller" Dokku
-    # On va faire les installations de manière plus ciblée
 
     echo "Tentative d'installation des pré-requis sans déclencher Dokku..."
 
-    # Installer les paquets essentiels qui ne devraient pas interférer avec Dokku
-    # (ca-certificates, curl, gnupg sont génériques et openssh-client est sécurisé)
     apt-get update && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des dépendances de base APT. Arrêt du script."; exit 1; }
 
     # Ajout de la clé GPG officielle de Docker:
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    
+    # --- MODIFICATION ICI pour gérer le prompt 'Overwrite?' ---
+    # Utilisez 'yes |' pour répondre automatiquement 'y' à toute question de surécriture
+    yes | curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    # --- FIN DE LA MODIFICATION ---
+
     chmod a+r /etc/apt/keyrings/docker.gpg
 
     # Ajout du dépôt Docker aux sources APT:
@@ -67,17 +66,10 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
       "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
       sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     
-    # Mettre à jour les listes de paquets après avoir ajouté le dépôt Docker
-    # Cela est nécessaire pour que apt connaisse les paquets Docker
     apt-get update
 
-    # Installation de Docker CE. Ne pas ajouter d'autres paquets Nginx ici.
     echo "Installation de Docker CE..."
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
-
-    # Désactiver DEBIAN_FRONTEND=noninteractive si aucune autre opération apt n'est attendue
-    # Il est préférable de le laisser activé jusqu'à la fin de toutes les opérations apt-get pour plus de sécurité
-    # unset DEBIAN_FRONTEND # Commenté pour le garder actif plus longtemps
 
 elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
     echo "Installation des dépendances pour $OS..."
@@ -103,7 +95,6 @@ echo "Installation de PM2..."
 if ! command -v node &> /dev/null; then
     echo "Installation minimale de Node.js pour PM2..."
     if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-        # DEBIAN_FRONTEND=noninteractive est déjà activé.
         curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - || { echo "Échec du script d'installation NodeSource. Arrêt du script."; exit 1; }
         apt-get install -y nodejs || { echo "Échec de l'installation de Node.js. Arrêt du script."; exit 1; }
     elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
@@ -186,7 +177,6 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     apt-get install -y ufw || { echo "Échec de l'installation de UFW. Arrêt du script."; exit 1; }
     ufw allow ssh || { echo "Échec de l'ouverture du port SSH dans UFW. Arrêt du script."; exit 1; }
     ufw --force enable || { echo "Échec de l'activation de UFW. Arrêt du script."; exit 1; }
-    #unset DEBIAN_FRONTEND # Peut être unset ici si plus aucune opération apt-get n'est attendue
     echo "UFW configuré. Seul le port SSH est ouvert pour l'extérieur."
 else
     echo "Configuration de pare-feu non gérée pour cette distribution. Veuillez vous assurer que le port SSH (22) est ouvert."
