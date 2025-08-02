@@ -2,12 +2,8 @@
 
 # --- Configuration du Script de Setup ---
 # URL de votre dépôt GitHub (utilisez l'URL HTTPS pour le clonage)
-# Assurez-vous que le dépôt est PUBLIC pour que git puisse y accéder sans authentification.
 AGENT_REPO_URL="https://github.com/CodCodFr/Observation-agent.git"
-# Le sous-répertoire où se trouvent les fichiers de l'agent dans votre dépôt GitHub.
-# Si agent.js, package.json sont directement à la racine du dépôt, laissez AGENT_DIR_IN_REPO vide.
-# Si ils sont dans un dossier "agent" comme Observatio-agent/agent/, alors mettez "agent".
-AGENT_DIR_IN_REPO=""
+AGENT_DIR_IN_REPO="" # Le sous-répertoire où se trouvent les fichiers de l'agent dans votre dépôt (ici, 'agent/')
 
 AGENT_PORT="3001" # Port sur lequel l'agent écoutera localement
 YOUR_BACKEND_IP="VOTRE_IP_PUBLIQUE_DU_BACKEND" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
@@ -43,37 +39,61 @@ echo "Système d'exploitation détecté: $OS $VER"
 # --- 1. Installation de Node.js, NPM, PM2, OpenSSH Client, et Git ---
 echo "1. Installation des dépendances (Node.js, NPM, PM2, OpenSSH Client, Git)..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    echo "Tentative de nettoyage des installations Node.js/NPM existantes et résolution des paquets cassés..."
-    # Nettoyage profond des paquets Node.js/NPM et du dépôt NodeSource
-    sudo apt-get purge -y nodejs npm node > /dev/null 2>&1 || true # Utiliser || true pour ignorer les erreurs si le paquet n'existe pas
-    sudo apt-get autoremove -y > /dev/null 2>&1 || true
-    sudo apt-get clean > /dev/null 2>&1 || true
-    sudo rm -f /etc/apt/sources.list.d/nodesource.list # Supprime l'ancien dépôt NodeSource si existant
+    echo "Tentative de résolution des problèmes de paquets existants..."
 
-    # Tente de corriger les paquets cassés avant de continuer
-    echo "Correction des paquets cassés et mise à jour du système..."
-    sudo apt-get update --fix-missing -y || true
-    sudo dpkg --configure -a || true
-    sudo apt-get install -f -y || true
-    sudo apt-get dist-upgrade -y || true
-    echo "Nettoyage terminé."
-
-    # Installation des nouvelles dépendances
+    # 1. Mettre à jour et installer les outils de base
     apt-get update
-    apt-get install -y curl openssh-client git # Ajout de git ici
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - # Installe le nouveau dépôt NodeSource
-    apt-get install -y nodejs npm
+    apt-get install -y curl openssh-client git
+
+    # 2. Supprimer l'ancien dépôt NodeSource si existant (pour qu'il soit recréé proprement)
+    echo "Suppression des anciens dépôts NodeSource si présents..."
+    sudo rm -f /etc/apt/sources.list.d/nodesource.list*
+    sudo apt-get update > /dev/null 2>&1 || true
+
+    # 3. Ajouter le dépôt NodeSource et installer Node.js LTS
+    echo "Ajout du dépôt NodeSource et installation de Node.js LTS..."
+    # Exécuter la commande setup_lts.x qui va configurer le dépôt
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+
+    # Tenter de corriger les dépendances et installer Node.js et NPM
+    # Utiliser 'apt-get dist-upgrade' avant 'apt-get install' pour une meilleure résolution des dépendances
+    echo "Tenter de résoudre les paquets cassés et installer Node.js/NPM..."
+    sudo apt-get update # Mettre à jour après l'ajout du nouveau dépôt
+    sudo dpkg --configure -a || true # Reconfigure les paquets non configurés
+    sudo apt-get install -f -y || true # Tente de résoudre les dépendances manquantes
+    sudo apt-get dist-upgrade -y || true # Met à niveau le système, peut aider à résoudre les conflits
+    
+    # Installer Node.js et NPM (npm est une dépendance de nodejs sur NodeSource)
+    # Utilisation de 'apt-get install --reinstall' si nodejs/npm sont déjà là mais cassés
+    apt-get install -y nodejs npm || {
+        echo "L'installation initiale de Node.js/NPM a échoué. Tentative de réinstallation..."
+        apt-get install --reinstall -y nodejs npm || {
+            echo "Échec de la réinstallation de Node.js/NPM. La commande APT a signalé une erreur. Cela pourrait indiquer un conflit irréversible sans purge."
+            echo "Veuillez vérifier les paquets manuellement (ex: 'dpkg -l | grep node' ou 'apt-cache policy nodejs')."
+            exit 1
+        }
+    }
+
+    # Vérification finale de Node.js et NPM
+    if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+        echo "Erreur critique: Node.js ou NPM n'a pas pu être installé ou trouvé dans le PATH après l'installation. Arrêt du script."
+        exit 1
+    fi
+    echo "Node.js et NPM installés avec succès."
+
 elif [[ "$OS" == "centos" || "$OS" == "rhel" ]]; then
-    # Pour CentOS/RHEL, le problème est moins courant, mais on peut ajouter un nettoyage similaire si nécessaire.
     echo "Installation des dépendances pour CentOS/RHEL..."
-    yum install -y curl openssh-clients git # Ajout de git ici
+    yum install -y curl openssh-clients git
     curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash -
     yum install -y nodejs npm
 else
     echo "Installation de Node.js non prise en charge pour cette distribution. Veuillez installer manuellement Node.js, NPM, PM2 et Git."
     exit 1
 fi
-npm install -g pm2
+
+# PM2 est installé après Node.js/NPM, car il dépend d'eux
+echo "Installation de PM2..."
+npm install -g pm2 || { echo "Échec de l'installation de PM2. Arrêt du script."; exit 1; }
 echo "Dépendances essentielles installées."
 
 # --- 2. Création du répertoire de l'agent et clonage du dépôt GitHub ---
@@ -83,18 +103,14 @@ mkdir -p "$AGENT_INSTALL_DIR"
 cd "$AGENT_INSTALL_DIR" || { echo "Échec de cd vers $AGENT_INSTALL_DIR. Arrêt du script."; exit 1; }
 
 # Cloner le dépôt et copier les fichiers de l'agent au bon endroit
-# Cloner dans un dossier temporaire pour ne pas interférer avec le répertoire d'installation
 git clone "$AGENT_REPO_URL" temp_repo_clone || { echo "Échec du clonage du dépôt Git. Arrêt du script."; exit 1; }
 
 # Vérifier si AGENT_DIR_IN_REPO est vide ou non
 if [ -z "$AGENT_DIR_IN_REPO" ]; then
-    # Si AGENT_DIR_IN_REPO est vide, l'agent est à la racine du dépôt
     echo "Copiage des fichiers de l'agent depuis la racine du dépôt cloné..."
     cp -r temp_repo_clone/* . || { echo "Échec de la copie des fichiers de l'agent. Arrêt du script."; exit 1; }
 else
-    # Si AGENT_DIR_IN_REPO est spécifié, l'agent est dans un sous-dossier
     echo "Copiage des fichiers de l'agent depuis le sous-dossier '$AGENT_DIR_IN_REPO' du dépôt cloné..."
-    # Assurez-vous que le dossier source existe
     if [ ! -d "temp_repo_clone/$AGENT_DIR_IN_REPO" ]; then
         echo "Erreur: Le sous-dossier de l'agent '$AGENT_DIR_IN_REPO' n'existe pas dans le dépôt cloné. Veuillez vérifier AGENT_DIR_IN_REPO."
         exit 1
@@ -158,7 +174,6 @@ if [ $? -ne 0 ]; then
     exit 1
 else
     echo "Requête cURL envoyée au backend. Réponse: $curl_output"
-    # Vous pouvez ajouter une logique pour vérifier la réponse JSON du backend ici si nécessaire.
 fi
 echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 
