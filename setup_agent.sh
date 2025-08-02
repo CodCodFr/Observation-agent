@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # --- Configuration du Script de Setup ---
-# URL de votre dépôt GitHub (utilisez l'URL HTTPS pour le clonage)
-AGENT_REPO_URL="https://github.com/CodCodFr/Observation-agent.git"
-AGENT_DIR_IN_REPO="" # Le sous-répertoire où se trouvent les fichiers de l'agent dans votre dépôt (ici, 'agent/')
+# URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
+# Assurez-vous que cette image est publique sur GHCR.
+DOCKER_IMAGE_NAME="ghcr.io/CodCodFr/observation-agent:latest"
 
-AGENT_PORT="3001" # Port sur lequel l'agent écoutera localement
-YOUR_BACKEND_IP="VOTRE_IP_PUBLIQUE_DU_BACKEND" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
+AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
+YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend
-BACKEND_PORT="3000" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
+BACKEND_PORT="3001" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
 TUNNEL_PORT="10000" # Le port que le tunnel va créer sur votre backend (À REMPLACER si vous en utilisez un autre ou un système dynamique)
 
 # Récupérer les arguments passés par la commande curl
@@ -16,11 +16,13 @@ API_SECRET_FOR_AGENT="$1" # La clé secrète pour l'agent (générée par votre 
 VPS_IDENTIFIER="$2"       # L'ID unique de ce VPS (généré par votre backend)
 
 LOG_FILE="/var/log/vps-agent-setup.log"
+# Redirige toute la sortie (stdout et stderr) vers le fichier de log et vers la console
 exec > >(tee -a ${LOG_FILE}) 2>&1
-echo "--- Début du processus d'installation de l'agent VPS avec tunnel SSH ---"
+echo "--- Début du processus d'installation de l'agent VPS avec Docker et tunnel SSH ---"
 echo "Date: $(date)"
 
-# --- Pré-requis (détection OS, root check) ---
+---
+## 1. Pré-requis (détection OS, root check)
 if [ "$EUID" -ne 0 ]; then
   echo "Ce script doit être exécuté avec les privilèges root. Utilisez 'sudo su -' ou 'sudo bash'."
   exit 1
@@ -36,119 +38,106 @@ else
 fi
 echo "Système d'exploitation détecté: $OS $VER"
 
-# --- 1. Installation de Node.js, NPM, PM2, OpenSSH Client, et Git ---
-echo "1. Installation des dépendances (Node.js, NPM, PM2, OpenSSH Client, Git)..."
+---
+## 2. Installation de Docker, PM2 et OpenSSH Client (Évitement de Dokku)
+echo "Installation des dépendances (Docker, PM2, OpenSSH Client)..."
+
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    echo "Tentative de résolution des problèmes de paquets existants..."
+    # Définir le frontend non-interactif pour toutes les opérations apt-get
+    # Cela reste crucial, même si Dokku contourne certaines parties, c'est la base.
+    export DEBIAN_FRONTEND=noninteractive
 
-    # 1. Mettre à jour et installer les outils de base
-    apt-get update
-    apt-get install -y curl openssh-client git
+    # On ne fait pas de 'apt-get update' global tout de suite pour éviter de "réveiller" Dokku
+    # On va faire les installations de manière plus ciblée
 
-    # 2. Supprimer l'ancien dépôt NodeSource si existant (pour qu'il soit recréé proprement)
-    echo "Suppression des anciens dépôts NodeSource si présents..."
-    sudo rm -f /etc/apt/sources.list.d/nodesource.list*
-    sudo apt-get update > /dev/null 2>&1 || true
+    echo "Tentative d'installation des pré-requis sans déclencher Dokku..."
 
-    # 3. Ajouter le dépôt NodeSource et installer Node.js LTS
-    echo "Ajout du dépôt NodeSource et installation de Node.js LTS..."
-    # Exécuter la commande setup_lts.x qui va configurer le dépôt
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+    # Installer les paquets essentiels qui ne devraient pas interférer avec Dokku
+    # (ca-certificates, curl, gnupg sont génériques et openssh-client est sécurisé)
+    apt-get update && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des dépendances de base APT. Arrêt du script."; exit 1; }
 
-    # Tenter de corriger les dépendances et installer Node.js et NPM
-    # Utiliser 'apt-get dist-upgrade' avant 'apt-get install' pour une meilleure résolution des dépendances
-    echo "Tenter de résoudre les paquets cassés et installer Node.js/NPM..."
-    sudo apt-get update # Mettre à jour après l'ajout du nouveau dépôt
-    sudo dpkg --configure -a || true # Reconfigure les paquets non configurés
-    sudo apt-get install -f -y || true # Tente de résoudre les dépendances manquantes
-    sudo apt-get dist-upgrade -y || true # Met à niveau le système, peut aider à résoudre les conflits
+    # Ajout de la clé GPG officielle de Docker:
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+
+    # Ajout du dépôt Docker aux sources APT:
+    echo \
+      "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     
-    # Installer Node.js et NPM (npm est une dépendance de nodejs sur NodeSource)
-    # Utilisation de 'apt-get install --reinstall' si nodejs/npm sont déjà là mais cassés
-    apt-get install -y nodejs npm || {
-        echo "L'installation initiale de Node.js/NPM a échoué. Tentative de réinstallation..."
-        apt-get install --reinstall -y nodejs npm || {
-            echo "Échec de la réinstallation de Node.js/NPM. La commande APT a signalé une erreur. Cela pourrait indiquer un conflit irréversible sans purge."
-            echo "Veuillez vérifier les paquets manuellement (ex: 'dpkg -l | grep node' ou 'apt-cache policy nodejs')."
-            exit 1
-        }
-    }
+    # Mettre à jour les listes de paquets après avoir ajouté le dépôt Docker
+    # Cela est nécessaire pour que apt connaisse les paquets Docker
+    apt-get update
 
-    # Vérification finale de Node.js et NPM
-    if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
-        echo "Erreur critique: Node.js ou NPM n'a pas pu être installé ou trouvé dans le PATH après l'installation. Arrêt du script."
-        exit 1
+    # Installation de Docker CE. Ne pas ajouter d'autres paquets Nginx ici.
+    echo "Installation de Docker CE..."
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
+
+    # Désactiver DEBIAN_FRONTEND=noninteractive si aucune autre opération apt n'est attendue
+    # Il est préférable de le laisser activé jusqu'à la fin de toutes les opérations apt-get pour plus de sécurité
+    # unset DEBIAN_FRONTEND # Commenté pour le garder actif plus longtemps
+
+elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
+    echo "Installation des dépendances pour $OS..."
+    if command -v dnf &> /dev/null; then
+        PKG_MANAGER="dnf"
+    else
+        PKG_MANAGER="yum"
     fi
-    echo "Node.js et NPM installés avec succès."
-
-elif [[ "$OS" == "centos" || "$OS" == "rhel" ]]; then
-    echo "Installation des dépendances pour CentOS/RHEL..."
-    yum install -y curl openssh-clients git
-    curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash -
-    yum install -y nodejs npm
+    $PKG_MANAGER install -y ${PKG_MANAGER}-utils openssh-clients || { echo "Échec de l'installation des dépendances via $PKG_MANAGER. Arrêt du script."; exit 1; }
+    
+    $PKG_MANAGER config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || { echo "Échec de l'ajout du dépôt Docker. Arrêt du script."; exit 1; }
+    $PKG_MANAGER install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
+    
+    systemctl start docker || { echo "Échec du démarrage de Docker. Arrêt du script."; exit 1; }
+    systemctl enable docker || { echo "Échec de l'activation de Docker au démarrage. Arrêt du script."; exit 1; }
 else
-    echo "Installation de Node.js non prise en charge pour cette distribution. Veuillez installer manuellement Node.js, NPM, PM2 et Git."
+    echo "Installation de Docker non prise en charge pour cette distribution. Veuillez installer Docker manuellement."
     exit 1
 fi
 
-# PM2 est installé après Node.js/NPM, car il dépend d'eux
+# PM2 est nécessaire pour gérer le tunnel SSH
 echo "Installation de PM2..."
-npm install -g pm2 || { echo "Échec de l'installation de PM2. Arrêt du script."; exit 1; }
-echo "Dépendances essentielles installées."
-
-# --- 2. Création du répertoire de l'agent et clonage du dépôt GitHub ---
-echo "2. Création du répertoire de l'agent et clonage du dépôt GitHub..."
-AGENT_INSTALL_DIR="/opt/vps-agent"
-mkdir -p "$AGENT_INSTALL_DIR"
-cd "$AGENT_INSTALL_DIR" || { echo "Échec de cd vers $AGENT_INSTALL_DIR. Arrêt du script."; exit 1; }
-
-# Cloner le dépôt et copier les fichiers de l'agent au bon endroit
-git clone "$AGENT_REPO_URL" temp_repo_clone || { echo "Échec du clonage du dépôt Git. Arrêt du script."; exit 1; }
-
-# Vérifier si AGENT_DIR_IN_REPO est vide ou non
-if [ -z "$AGENT_DIR_IN_REPO" ]; then
-    echo "Copiage des fichiers de l'agent depuis la racine du dépôt cloné..."
-    cp -r temp_repo_clone/* . || { echo "Échec de la copie des fichiers de l'agent. Arrêt du script."; exit 1; }
-else
-    echo "Copiage des fichiers de l'agent depuis le sous-dossier '$AGENT_DIR_IN_REPO' du dépôt cloné..."
-    if [ ! -d "temp_repo_clone/$AGENT_DIR_IN_REPO" ]; then
-        echo "Erreur: Le sous-dossier de l'agent '$AGENT_DIR_IN_REPO' n'existe pas dans le dépôt cloné. Veuillez vérifier AGENT_DIR_IN_REPO."
-        exit 1
+if ! command -v node &> /dev/null; then
+    echo "Installation minimale de Node.js pour PM2..."
+    if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+        # DEBIAN_FRONTEND=noninteractive est déjà activé.
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - || { echo "Échec du script d'installation NodeSource. Arrêt du script."; exit 1; }
+        apt-get install -y nodejs || { echo "Échec de l'installation de Node.js. Arrêt du script."; exit 1; }
+    elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
+        curl -fsSL https://rpm.nodesource.com/setup_lts.x | bash - || { echo "Échec du script d'installation NodeSource. Arrêt du script."; exit 1; }
+        $PKG_MANAGER install -y nodejs || { echo "Échec de l'installation de Node.js. Arrêt du script."; exit 1; }
     fi
-    cp -r temp_repo_clone/"$AGENT_DIR_IN_REPO"/* . || { echo "Échec de la copie des fichiers de l'agent. Arrêt du script."; exit 1; }
 fi
+npm install -g pm2 || { echo "Échec de l'installation de PM2. Arrêt du script."; exit 1; }
+echo "Dépendances essentielles (Docker, PM2) installées."
 
-rm -rf temp_repo_clone # Nettoyer le dépôt cloné temporaire
 
-echo "Fichiers de l'agent téléchargés depuis GitHub."
+---
+## 3. Démarrage et configuration de l'agent Docker
+echo "Démarrage et configuration de l'agent Docker..."
 
-# --- 3. Installation des dépendances NPM de l'agent ---
-echo "3. Installation des dépendances NPM de l'agent..."
-if [ -f package.json ]; then
-    npm install --production || { echo "Échec de l'installation des dépendances NPM. Arrêt du script."; exit 1; }
-else
-    echo "Avertissement: Aucun fichier package.json trouvé dans '$AGENT_INSTALL_DIR'. Aucune dépendance NPM à installer."
-fi
-echo "Dépendances NPM installées (si package.json existait)."
+# Arrêter et supprimer l'ancien conteneur s'il existe
+docker stop vps-agent-container > /dev/null 2>&1 || true
+docker rm vps-agent-container > /dev/null 2>&1 || true
 
-# --- 4. Configuration de l'agent (fichier .env) ---
-echo "4. Configuration de l'agent..."
-if [ -z "$API_SECRET_FOR_AGENT" ] || [ -z "$VPS_IDENTIFIER" ]; then
-    echo "Erreur: API_SECRET_FOR_AGENT ou VPS_IDENTIFIER sont manquants. L'agent ne sera pas configuré correctement."
-    exit 1
-fi
-echo "API_SECRET=$API_SECRET_FOR_AGENT" > .env
-echo "PORT=$AGENT_PORT" >> .env
-echo "Fichier .env créé pour l'agent."
+# Lancer le conteneur Docker de l'agent
+# Les secrets API_SECRET et PORT sont passés comme variables d'environnement au conteneur
+# Le port de l'agent est exposé sur l'interface localhost du VPS, pour être accessible par le tunnel SSH
+docker run -d --restart=always \
+  --name vps-agent-container \
+  -e API_SECRET="$API_SECRET_FOR_AGENT" \
+  -e PORT="$AGENT_PORT" \
+  -p 127.0.0.1:"$AGENT_PORT":"$AGENT_PORT" \
+  "$DOCKER_IMAGE_NAME" || { echo "Échec du lancement du conteneur Docker. Arrêt du script."; exit 1; }
 
-# --- 5. Démarrage de l'Agent Node.js (écoute sur localhost) ---
-echo "5. Lancement de l'Agent Node.js avec PM2..."
-pm2 start agent.js --name vps-agent -- restart-delay 5000 || { echo "Échec du démarrage de l'agent Node.js avec PM2. Arrêt du script."; exit 1; }
-pm2 save
-echo "Agent VPS lancé avec PM2."
+echo "Conteneur Docker de l'agent lancé."
 
-# --- 6. Génération de la paire de clés SSH pour le tunnel ---
-echo "6. Génération de la paire de clés SSH pour le tunnel..."
+---
+## 4. Génération de la paire de clés SSH pour le tunnel
+echo "Génération de la paire de clés SSH pour le tunnel..."
 SSH_KEY_PATH="$HOME/.ssh/id_rsa_vps_tunnel" # Clé stockée dans le home de l'utilisateur root
 ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" # Pas de passphrase
 chmod 600 "$SSH_KEY_PATH"
@@ -157,8 +146,9 @@ chmod 600 "$SSH_KEY_PATH.pub"
 PUBLIC_KEY_FOR_TUNNEL=$(cat "$SSH_KEY_PATH.pub")
 echo "Clé publique du tunnel générée: $PUBLIC_KEY_FOR_TUNNEL"
 
-# --- 7. Envoi de la Clé Publique à votre Backend ---
-echo "7. Envoi de la clé publique du tunnel à votre backend..."
+---
+## 5. Envoi de la Clé Publique à votre Backend
+echo "Envoi de la clé publique du tunnel à votre backend..."
 BACKEND_API_URL="http://${YOUR_BACKEND_IP}:${BACKEND_PORT}/api/register-tunnel-key" # Utilisez l'IP et le port de votre backend
 AUTH_TOKEN_FOR_BACKEND=$(echo -n "$API_SECRET_FOR_AGENT" | sha256sum | awk '{print $1}') # L'API_SECRET de l'agent sert d'authentification ici
 
@@ -177,9 +167,10 @@ else
 fi
 echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 
-
-# --- 8. Démarrage du tunnel SSH inversé avec PM2 ---
-echo "8. Lancement du tunnel SSH inversé avec PM2..."
+---
+## 6. Démarrage du tunnel SSH inversé avec PM2
+echo "Lancement du tunnel SSH inversé avec PM2..."
+# Le tunnel se connecte au port de l'agent exposé par Docker sur localhost
 PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
 pm2 start ssh --name vps-tunnel -- "$PM2_TUNNEL_ARGS" || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
 pm2 save
@@ -187,12 +178,15 @@ pm2 startup systemd # Assure que PM2 et ses processus (agent, tunnel) démarrent
 
 echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
 
-# --- 9. Configuration du pare-feu (UFW) ---
-echo "9. Configuration du pare-feu (UFW) pour SSH..."
+---
+## 7. Configuration du pare-feu (UFW)
+echo "Configuration du pare-feu (UFW) pour SSH..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    apt-get install -y ufw
-    ufw allow ssh # S'assurer que le SSH reste accessible pour l'utilisateur
-    ufw --force enable
+    # DEBIAN_FRONTEND=noninteractive est déjà activé.
+    apt-get install -y ufw || { echo "Échec de l'installation de UFW. Arrêt du script."; exit 1; }
+    ufw allow ssh || { echo "Échec de l'ouverture du port SSH dans UFW. Arrêt du script."; exit 1; }
+    ufw --force enable || { echo "Échec de l'activation de UFW. Arrêt du script."; exit 1; }
+    #unset DEBIAN_FRONTEND # Peut être unset ici si plus aucune opération apt-get n'est attendue
     echo "UFW configuré. Seul le port SSH est ouvert pour l'extérieur."
 else
     echo "Configuration de pare-feu non gérée pour cette distribution. Veuillez vous assurer que le port SSH (22) est ouvert."
@@ -200,6 +194,6 @@ fi
 
 echo "--- Processus d'installation terminé ! ---"
 echo "Vérifiez les logs dans ${LOG_FILE}"
-echo "Statut de l'agent PM2: pm2 status vps-agent"
+echo "Statut du conteneur Docker: docker ps -a | grep vps-agent-container"
 echo "Statut du tunnel PM2: pm2 status vps-tunnel"
 echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_BACKEND_IP}:${TUNNEL_PORT}"

@@ -1,0 +1,17 @@
+{
+  "name": "vps-agent",
+  "version": "1.0.0",
+  "description": "Agent de monitoring pour VPS",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.4.5",
+    "axios": "^1.6.8",
+    "pm2": "^5.4.0"
+  },
+  "author": "CodCodFr",
+  "license": "ISC"
+}
