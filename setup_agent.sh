@@ -21,7 +21,6 @@ exec > >(tee -a ${LOG_FILE}) 2>&1
 echo "--- Début du processus d'installation de l'agent VPS avec Docker et tunnel SSH ---"
 echo "Date: $(date)"
 
----
 ## 1. Pré-requis (détection OS, root check)
 if [ "$EUID" -ne 0 ]; then
   echo "Ce script doit être exécuté avec les privilèges root. Utilisez 'sudo su -' ou 'sudo bash'."
@@ -38,25 +37,26 @@ else
 fi
 echo "Système d'exploitation détecté: $OS $VER"
 
----
-## 2. Installation de Docker, PM2 et OpenSSH Client (Évitement de Dokku)
+# --- GLOBAL SETTING FOR NON-INTERACTIVE APT (Débian/Ubuntu) ---
+# Set this once at the top to ensure all apt commands are non-interactive.
+# It will be unset at the end for clean exit, but will apply to all relevant sections.
+if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    export DEBIAN_FRONTEND=noninteractive
+fi
+
+## 2. Installation de Docker, PM2 et OpenSSH Client (Évitement de Dokku & confirmation auto)
 echo "Installation des dépendances (Docker, PM2, OpenSSH Client)..."
 
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    # Définir le frontend non-interactif pour toutes les opérations apt-get
-    export DEBIAN_FRONTEND=noninteractive
-
     echo "Tentative d'installation des pré-requis sans déclencher Dokku..."
 
-    apt-get update && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des dépendances de base APT. Arrêt du script."; exit 1; }
+    apt-get update -y && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des dépendances de base APT. Arrêt du script."; exit 1; }
 
     # Ajout de la clé GPG officielle de Docker:
     install -m 0755 -d /etc/apt/keyrings
     
-    # --- MODIFICATION ICI pour gérer le prompt 'Overwrite?' ---
     # Utilisez 'yes |' pour répondre automatiquement 'y' à toute question de surécriture
-    yes | curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    # --- FIN DE LA MODIFICATION ---
+    yes | curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg || { echo "Échec de l'ajout de la clé GPG Docker. Arrêt du script."; exit 1; }
 
     chmod a+r /etc/apt/keyrings/docker.gpg
 
@@ -66,7 +66,7 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
       "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
       sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     
-    apt-get update
+    apt-get update -y
 
     echo "Installation de Docker CE..."
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
@@ -106,7 +106,6 @@ npm install -g pm2 || { echo "Échec de l'installation de PM2. Arrêt du script.
 echo "Dépendances essentielles (Docker, PM2) installées."
 
 
----
 ## 3. Démarrage et configuration de l'agent Docker
 echo "Démarrage et configuration de l'agent Docker..."
 
@@ -126,10 +125,13 @@ docker run -d --restart=always \
 
 echo "Conteneur Docker de l'agent lancé."
 
----
 ## 4. Génération de la paire de clés SSH pour le tunnel
 echo "Génération de la paire de clés SSH pour le tunnel..."
 SSH_KEY_PATH="$HOME/.ssh/id_rsa_vps_tunnel" # Clé stockée dans le home de l'utilisateur root
+
+# Supprime les clés existantes pour forcer la génération de nouvelles clés.
+rm -f "$SSH_KEY_PATH" "$SSH_KEY_PATH.pub"
+
 ssh-keygen -t rsa -b 4096 -f "$SSH_KEY_PATH" -N "" # Pas de passphrase
 chmod 600 "$SSH_KEY_PATH"
 chmod 600 "$SSH_KEY_PATH.pub"
@@ -137,7 +139,6 @@ chmod 600 "$SSH_KEY_PATH.pub"
 PUBLIC_KEY_FOR_TUNNEL=$(cat "$SSH_KEY_PATH.pub")
 echo "Clé publique du tunnel générée: $PUBLIC_KEY_FOR_TUNNEL"
 
----
 ## 5. Envoi de la Clé Publique à votre Backend
 echo "Envoi de la clé publique du tunnel à votre backend..."
 BACKEND_API_URL="http://${YOUR_BACKEND_IP}:${BACKEND_PORT}/api/register-tunnel-key" # Utilisez l'IP et le port de votre backend
@@ -158,7 +159,6 @@ else
 fi
 echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 
----
 ## 6. Démarrage du tunnel SSH inversé avec PM2
 echo "Lancement du tunnel SSH inversé avec PM2..."
 # Le tunnel se connecte au port de l'agent exposé par Docker sur localhost
@@ -169,7 +169,6 @@ pm2 startup systemd # Assure que PM2 et ses processus (agent, tunnel) démarrent
 
 echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
 
----
 ## 7. Configuration du pare-feu (UFW)
 echo "Configuration du pare-feu (UFW) pour SSH..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
@@ -180,6 +179,11 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     echo "UFW configuré. Seul le port SSH est ouvert pour l'extérieur."
 else
     echo "Configuration de pare-feu non gérée pour cette distribution. Veuillez vous assurer que le port SSH (22) est ouvert."
+fi
+
+# --- GLOBAL SETTING UNSET ---
+if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
+    unset DEBIAN_FRONTEND # Unset at the end for clean exit
 fi
 
 echo "--- Processus d'installation terminé ! ---"
