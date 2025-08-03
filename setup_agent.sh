@@ -160,7 +160,7 @@ echo "Clé publique du tunnel générée: $PUBLIC_KEY_FOR_TUNNEL"
 
 ## 5. Envoi de la Clé Publique à votre Backend
 echo "Envoi de la clé publique du tunnel à votre backend..."
-BACKEND_API_URL="http://${YOUR_BACKEND_IP}:${BACKEND_PORT}/api/register-tunnel-key"
+BACKEND_API_URL="http://${YOUR_BACKEND_IP}:${BACKEND_PORT}/agent/register-tunnel-key"
 AUTH_TOKEN_FOR_BACKEND=$(echo -n "$API_SECRET_FOR_AGENT" | sha256sum | awk '{print $1}')
 
 curl_output=$(curl -s -X POST \
