@@ -49,6 +49,9 @@ const COMMAND_MAPPING = {
 // --- Route pour Exécuter les Commandes ---
 app.post('/execute-command', (req, res) => {
     const { commandName } = req.body;
+    
+    // --- NOUVEAU LOGGING ICI ---
+    console.log(`[Agent] Requête reçue pour exécuter la commande: ${commandName}`);
 
     if (!commandName || !COMMAND_MAPPING[commandName]) {
         return res.status(400).json({ error: 'Invalid or unsupported commandName' });
