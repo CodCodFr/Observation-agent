@@ -6,7 +6,7 @@
     DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
     AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-    YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur backend (À REMPLACER IMPÉRATIVEMENT par l'IP réelle de votre backend)
+    YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur backend (À REMPLACER IMPÉRATIVEMENT par l'IP réelle de votre backend)
     SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
     BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
     TUNNEL_PORT="10001" # <--- NOUVEAU PORT : Le port que le tunnel va créer sur votre backend (doit être libre sur le backend)
@@ -260,4 +260,3 @@
     echo "Statut du tunnel Systemd: systemctl status vps-tunnel.service"
     echo "Logs du tunnel Systemd: journalctl -u vps-tunnel.service --no-pager"
     echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_BACKEND_IP}:${TUNNEL_PORT}"
-    
