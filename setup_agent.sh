@@ -6,7 +6,7 @@
 DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
 AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
+YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
 TUNNEL_PORT="10000" # Le port que le tunnel va créer sur votre backend (À REMPLACER si vous en utilisez un autre ou un système dynamique)
@@ -160,7 +160,7 @@ echo "Clé publique du tunnel générée: $PUBLIC_KEY_FOR_TUNNEL"
 
 ## 5. Envoi de la Clé Publique à votre Backend
 echo "Envoi de la clé publique du tunnel à votre backend..."
-BACKEND_API_URL="http://${YOUR_BACKEND_IP}:${BACKEND_PORT}/agent/register-tunnel-key"
+BACKEND_API_URL="https://${YOUR_BACKEND_IP}:${BACKEND_PORT}/agent/register-tunnel-key"
 AUTH_TOKEN_FOR_BACKEND=$(echo -n "$API_SECRET_FOR_AGENT" | sha256sum | awk '{print $1}')
 
 curl_output=$(curl -s -X POST \
