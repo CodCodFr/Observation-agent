@@ -6,7 +6,8 @@
 DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
 AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur backend (À REMPLACER IMPÉRATIVEMENT par l'IP réelle de votre backend)
+YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
+YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
 TUNNEL_PORT="10001" # <--- NOUVEAU PORT : Le port que le tunnel va créer sur votre backend (doit être libre sur le backend)
@@ -195,7 +196,7 @@ pm2 delete vps-tunnel > /dev/null 2>&1 || true
 sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
 
 # Définir les arguments du tunnel SSH
-SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
+SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_SSH_IP"
 
 # Lancer le processus PM2 pour le tunnel.
 sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- $SSH_COMMAND_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
