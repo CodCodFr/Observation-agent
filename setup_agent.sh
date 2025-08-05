@@ -6,7 +6,8 @@
 DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
 AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
+YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
+YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
 TUNNEL_PORT="10000" # Le port que le tunnel va créer sur votre backend (À REMPLACER si vous en utilisez un autre ou un système dynamique)
@@ -195,7 +196,7 @@ pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Éch
 
 # Define the SSH arguments, using the explicitly defined SSH_KEY_PATH and SSH_PORT
 # J'ai ajouté l'option -p pour spécifier le port SSH non standard.
-PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
+PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_SSH_IP"
 
 # Use sudo -u to run pm2 start as the correct user
 # Remove any existing pm2 process with the same name before starting
@@ -229,4 +230,4 @@ echo "Vérifiez les logs dans ${LOG_FILE}"
 echo "Statut du conteneur Docker: docker ps -a | grep vps-agent-container"
 echo "Statut du tunnel PM2: sudo -u $PM2_RUN_USER pm2 status vps-tunnel"
 echo "Logs du tunnel PM2: sudo -u $PM2_RUN_USER pm2 logs vps-tunnel --lines 100"
-echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_BACKEND_IP}:${TUNNEL_PORT}"
+echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_SSH_IP}:${TUNNEL_PORT}"
