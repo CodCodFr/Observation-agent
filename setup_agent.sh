@@ -6,12 +6,11 @@
 DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
 AGENT_PORT="3001" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
-YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
-SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend
+YOUR_BACKEND_IP="152.53.104.19" # IP publique de votre serveur backend (À REMPLACER IMPÉRATIVEMENT par l'IP réelle de votre backend)
+SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
-TUNNEL_PORT="10000" # Le port que le tunnel va créer sur votre backend (À REMPLACER si vous en utilisez un autre ou un système dynamique)
-SSH_PORT="22326" # <--- NOUVEAU: Le port SSH de votre serveur backend
+TUNNEL_PORT="10001" # <--- NOUVEAU PORT : Le port que le tunnel va créer sur votre backend (doit être libre sur le backend)
+SSH_PORT="22326" # Le port SSH de votre serveur backend (celui sur lequel sshd écoute pour les connexions entrantes)
 
 # Récupérer les arguments passés par la commande curl
 API_SECRET_FOR_AGENT="$1" # La clé secrète pour l'agent (générée par votre backend)
@@ -31,7 +30,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Determine the non-root user who invoked sudo, or default to root if sudo su - was used
-# This user will own the PM2 processes and SSH keys for the tunnel
+# This user will own the SSH keys for the tunnel
 PM2_RUN_USER=${SUDO_USER:-root}
 HOME_DIR_PM2_USER=$(eval echo "~$PM2_RUN_USER") # Get home directory of that user
 
@@ -44,7 +43,7 @@ else
     exit 1
 fi
 echo "Système d'exploitation détecté: $OS $VER"
-echo "Le tunnel PM2 sera exécuté sous l'utilisateur: $PM2_RUN_USER"
+echo "Le tunnel sera exécuté sous l'utilisateur: $PM2_RUN_USER"
 echo "Chemin de base des clés SSH pour le tunnel: $HOME_DIR_PM2_USER/.ssh/"
 
 # --- GLOBAL SETTING FOR NON-INTERACTIVE APT (Débian/Ubuntu) ---
@@ -52,8 +51,8 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     export DEBIAN_FRONTEND=noninteractive
 fi
 
-## 2. Installation de Docker, PM2 et OpenSSH Client
-echo "Installation des dépendances (Docker, PM2, OpenSSH Client)..."
+## 2. Installation de Docker et OpenSSH Client
+echo "Installation des dépendances (Docker, OpenSSH Client)..."
 
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     echo "Tentative d'installation des pré-requis sans déclencher Dokku..."
@@ -121,6 +120,9 @@ echo "Démarrage et configuration de l'agent Docker..."
 docker stop vps-agent-container > /dev/null 2>&1 || true
 docker rm vps-agent-container > /dev/null 2>&1 || true
 
+# Tirez la dernière image Docker depuis GHCR pour s'assurer que le code est à jour
+docker pull "$DOCKER_IMAGE_NAME" || { echo "Échec du pull de l'image Docker. Arrêt du script."; exit 1; }
+
 # Lancer le conteneur Docker de l'agent
 # Les secrets API_SECRET et PORT sont passés comme variables d'environnement au conteneur
 # Le port de l'agent est exposé sur l'interface localhost du VPS, pour être accessible par le tunnel SSH
@@ -162,6 +164,7 @@ echo "Clé publique du tunnel générée: $PUBLIC_KEY_FOR_TUNNEL"
 
 ## 5. Envoi de la Clé Publique à votre Backend
 echo "Envoi de la clé publique du tunnel à votre backend..."
+# L'URL du backend est l'IP publique de votre VPS Backend
 BACKEND_API_URL="https://${YOUR_BACKEND_IP}:${BACKEND_PORT}/agent/register-tunnel-key"
 AUTH_TOKEN_FOR_BACKEND=$(echo -n "$API_SECRET_FOR_AGENT" | sha256sum | awk '{print $1}')
 
@@ -181,29 +184,23 @@ else
 fi
 echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 
-## 6. Démarrage du tunnel SSH inversé avec PM2
-echo "Lancement du tunnel SSH inversé avec PM2..."
+## 6. Démarrage du tunnel SSH inversé avec Systemd (SIMPLIFIÉ)
+echo "Lancement du tunnel SSH inversé avec Systemd (via PM2)..."
 
-# 1. Configurer Systemd pour PM2.
-# Cette commande est exécutée en tant que root, ce qui lui donne les permissions
-# pour écrire le fichier de service. Les options -u et --hp indiquent à Systemd
-# d'exécuter le service en tant que l'utilisateur PM2_RUN_USER.
-pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
-
-# 2. Définir les arguments du tunnel SSH
-# L'option -p est ajoutée pour spécifier le port SSH non standard.
-# NOTE: J'ai retiré les guillemets autour de la variable pour que le shell
-# sépare correctement chaque argument.
-PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_SSH_IP"
-
-# 3. Lancer le processus PM2.
-# Nous utilisons sudo -u pour s'assurer que le processus PM2 est démarré sous
-# l'utilisateur PM2_RUN_USER et non root, et que le tunnel utilise les clés
-# de cet utilisateur.
+# Arrêter et supprimer l'ancien processus PM2 du tunnel s'il existe
 pm2 stop vps-tunnel > /dev/null 2>&1 || true
 pm2 delete vps-tunnel > /dev/null 2>&1 || true
 
-sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- $PM2_TUNNEL_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
+# Configurer Systemd pour PM2. Ceci crée le service pm2-<user>.service
+sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
+
+# Définir les arguments du tunnel SSH
+SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
+
+# Lancer le processus PM2 pour le tunnel.
+sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- $SSH_COMMAND_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
+
+# Sauvegarder la liste des processus PM2 pour qu'ils redémarrent au boot
 sudo -u "$PM2_RUN_USER" pm2 save || { echo "Échec de la sauvegarde PM2. Arrêt du script."; exit 1; }
 
 echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
@@ -230,4 +227,4 @@ echo "Vérifiez les logs dans ${LOG_FILE}"
 echo "Statut du conteneur Docker: docker ps -a | grep vps-agent-container"
 echo "Statut du tunnel PM2: sudo -u $PM2_RUN_USER pm2 status vps-tunnel"
 echo "Logs du tunnel PM2: sudo -u $PM2_RUN_USER pm2 logs vps-tunnel --lines 100"
-echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_SSH_IP}:${TUNNEL_PORT}"
+echo "Si tout est bon, votre backend peut maintenant communiquer avec ce VPS via le tunnel sur ${YOUR_BACKEND_IP}:${TUNNEL_PORT}"
