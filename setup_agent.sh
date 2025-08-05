@@ -79,20 +79,6 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     echo "Installation de Docker CE..."
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
 
-elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" || "$OS" == "almalinux" ]]; then
-    echo "Installation des dépendances pour $OS..."
-    if command -v dnf &> /dev/null; then
-        PKG_MANAGER="dnf"
-    else
-        PKG_MANAGER="yum"
-    fi
-    $PKG_MANAGER install -y ${PKG_MANAGER}-utils openssh-clients || { echo "Échec de l'installation des dépendances via $PKG_MANAGER. Arrêt du script."; exit 1; }
-    
-    $PKG_MANAGER config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || { echo "Échec de l'ajout du dépôt Docker. Arrêt du script."; exit 1; }
-    $PKG_MANAGER install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || { echo "Échec de l'installation de Docker. Arrêt du script."; exit 1; }
-    
-    systemctl start docker || { echo "Échec du démarrage de Docker. Arrêt du script."; exit 1; }
-    systemctl enable docker || { echo "Échec de l'activation de Docker au démarrage. Arrêt du script."; exit 1; }
 else
     echo "Installation de Docker non prise en charge pour cette distribution. Veuillez installer Docker manuellement."
     exit 1
