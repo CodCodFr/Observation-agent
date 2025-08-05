@@ -184,26 +184,26 @@ echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 ## 6. Démarrage du tunnel SSH inversé avec PM2
 echo "Lancement du tunnel SSH inversé avec PM2..."
 
-# PM2 needs to be initialized for the specific user if it hasn't been already
-# Run 'pm2 startup' as the target user to ensure it's set up for them.
-# This assumes pm2 is globally installed.
-#if [ "$PM2_RUN_USER" != "root" ]; then
-#    sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
-#else
-#    pm2 startup systemd || { echo "Échec de pm2 startup pour l'utilisateur root. Arrêt du script."; exit 1; }
-#fi
+# 1. Configurer Systemd pour PM2.
+# Cette commande est exécutée en tant que root, ce qui lui donne les permissions
+# pour écrire le fichier de service. Les options -u et --hp indiquent à Systemd
+# d'exécuter le service en tant que l'utilisateur PM2_RUN_USER.
 pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
 
-# Define the SSH arguments, using the explicitly defined SSH_KEY_PATH and SSH_PORT
-# J'ai ajouté l'option -p pour spécifier le port SSH non standard.
+# 2. Définir les arguments du tunnel SSH
+# L'option -p est ajoutée pour spécifier le port SSH non standard.
+# NOTE: J'ai retiré les guillemets autour de la variable pour que le shell
+# sépare correctement chaque argument.
 PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_SSH_IP"
 
-# Use sudo -u to run pm2 start as the correct user
-# Remove any existing pm2 process with the same name before starting
-sudo -u "$PM2_RUN_USER" pm2 stop vps-tunnel > /dev/null 2>&1 || true
-sudo -u "$PM2_RUN_USER" pm2 delete vps-tunnel > /dev/null 2>&1 || true
+# 3. Lancer le processus PM2.
+# Nous utilisons sudo -u pour s'assurer que le processus PM2 est démarré sous
+# l'utilisateur PM2_RUN_USER et non root, et que le tunnel utilise les clés
+# de cet utilisateur.
+pm2 stop vps-tunnel > /dev/null 2>&1 || true
+pm2 delete vps-tunnel > /dev/null 2>&1 || true
 
-sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- "$PM2_TUNNEL_ARGS" || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
+sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- $PM2_TUNNEL_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
 sudo -u "$PM2_RUN_USER" pm2 save || { echo "Échec de la sauvegarde PM2. Arrêt du script."; exit 1; }
 
 echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
