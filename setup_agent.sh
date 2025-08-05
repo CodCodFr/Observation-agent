@@ -10,10 +10,11 @@ YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLAC
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
 TUNNEL_PORT="10000" # Le port que le tunnel va créer sur votre backend (À REMPLACER si vous en utilisez un autre ou un système dynamique)
+SSH_PORT="22326" # <--- NOUVEAU: Le port SSH de votre serveur backend
 
 # Récupérer les arguments passés par la commande curl
 API_SECRET_FOR_AGENT="$1" # La clé secrète pour l'agent (générée par votre backend)
-VPS_IDENTIFIER="$2"       # L'ID unique de ce VPS (généré par votre backend)
+VPS_IDENTIFIER="$2" # L'ID unique de ce VPS (généré par votre backend)
 
 # --- Configuration du Log ---
 LOG_FILE="/var/log/vps-agent-setup.log"
@@ -191,8 +192,9 @@ else
     pm2 startup systemd || { echo "Échec de pm2 startup pour l'utilisateur root. Arrêt du script."; exit 1; }
 fi
 
-# Define the SSH arguments, using the explicitly defined SSH_KEY_PATH
-PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
+# Define the SSH arguments, using the explicitly defined SSH_KEY_PATH and SSH_PORT
+# J'ai ajouté l'option -p pour spécifier le port SSH non standard.
+PM2_TUNNEL_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 $SSH_TUNNEL_USER@$YOUR_BACKEND_IP"
 
 # Use sudo -u to run pm2 start as the correct user
 # Remove any existing pm2 process with the same name before starting
@@ -208,7 +210,8 @@ echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
 echo "Configuration du pare-feu (UFW) pour SSH..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     apt-get install -y ufw || { echo "Échec de l'installation de UFW. Arrêt du script."; exit 1; }
-    ufw allow ssh || { echo "Échec de l'ouverture du port SSH dans UFW. Arrêt du script."; exit 1; }
+    # J'ai mis à jour cette ligne pour autoriser le port SSH non standard.
+    ufw allow $SSH_PORT/tcp || { echo "Échec de l'ouverture du port SSH dans UFW. Arrêt du script."; exit 1; }
     ufw --force enable || { echo "Échec de l'activation de UFW. Arrêt du script."; exit 1; }
     echo "UFW configuré. Seul le port SSH est ouvert pour l'extérieur."
 else
