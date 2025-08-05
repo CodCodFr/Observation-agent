@@ -186,11 +186,12 @@ echo "Lancement du tunnel SSH inversé avec PM2..."
 # PM2 needs to be initialized for the specific user if it hasn't been already
 # Run 'pm2 startup' as the target user to ensure it's set up for them.
 # This assumes pm2 is globally installed.
-if [ "$PM2_RUN_USER" != "root" ]; then
-    sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
-else
-    pm2 startup systemd || { echo "Échec de pm2 startup pour l'utilisateur root. Arrêt du script."; exit 1; }
-fi
+#if [ "$PM2_RUN_USER" != "root" ]; then
+#    sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
+#else
+#    pm2 startup systemd || { echo "Échec de pm2 startup pour l'utilisateur root. Arrêt du script."; exit 1; }
+#fi
+pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
 
 # Define the SSH arguments, using the explicitly defined SSH_KEY_PATH and SSH_PORT
 # J'ai ajouté l'option -p pour spécifier le port SSH non standard.
