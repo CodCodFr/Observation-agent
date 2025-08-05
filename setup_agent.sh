@@ -10,7 +10,7 @@ YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal (À REMPLAC
 YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal (À REMPLACER IMPÉRATIVEMENT)
 SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
 BACKEND_PORT="7999" # Port de votre backend Node.js (celui qui reçoit la clé publique, ex: 3000)
-TUNNEL_PORT="10001" # <--- NOUVEAU PORT : Le port que le tunnel va créer sur votre backend (doit être libre sur le backend)
+TUNNEL_PORT="10000" # <--- NOUVEAU PORT : Le port que le tunnel va créer sur votre backend (doit être libre sur le backend)
 SSH_PORT="22326" # Le port SSH de votre serveur backend (celui sur lequel sshd écoute pour les connexions entrantes)
 
 # Récupérer les arguments passés par la commande curl
