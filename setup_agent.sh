@@ -52,13 +52,14 @@ echo "Installation des dépendances (Docker, OpenSSH Client, jq)..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y && apt-get install -y ca-certificates curl gnupg openssh-client jq || { echo "Échec de l'installation des pré-requis APT."; exit 1; }
-    
+
     install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
-    
+
+
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
+
     apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io || { echo "Échec de l'installation de Docker CE."; exit 1; }
 elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" ]]; then
     yum install -y yum-utils device-mapper-persistent-data lvm2 openssh-clients jq || { echo "Échec de l'installation des pré-requis YUM."; exit 1; }
