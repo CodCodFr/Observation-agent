@@ -6,7 +6,7 @@ const { exec } = require('child_process');
 const crypto = require('crypto');
 
 // --- Configuration de l'Agent ---
-const PORT = parseInt(process.env.PORT || '3001'); // Port sur lequel l'agent écoute (LOCALEMENT)
+const PORT = parseInt(process.env.PORT || '3000'); // Port sur lequel l'agent écoute (LOCALEMENT)
 const API_SECRET = process.env.API_SECRET; // Clé secrète partagée avec le backend
 
 if (!API_SECRET) {
