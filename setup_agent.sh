@@ -179,16 +179,16 @@ pm2 stop vps-tunnel > /dev/null 2>&1 || true
 pm2 delete vps-tunnel > /dev/null 2>&1 || true
 
 # Configurer Systemd pour PM2. Ceci crée le service pm2-<user>.service
-sudo -u "$PM2_RUN_USER" pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
+sudo -u "$PM2_RUN_USER" /usr/bin/pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" || { echo "Échec de pm2 startup pour l'utilisateur $PM2_RUN_USER. Arrêt du script."; exit 1; }
 
 # Définir les arguments du tunnel SSH
 SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_SSH_IP"
 
 # Lancer le processus PM2 pour le tunnel.
-sudo -u "$PM2_RUN_USER" pm2 start ssh --name vps-tunnel -- $SSH_COMMAND_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
+sudo -u "$PM2_RUN_USER" /usr/bin/pm2 start ssh --name vps-tunnel -- $SSH_COMMAND_ARGS || { echo "Échec du démarrage du tunnel SSH. Arrêt du script."; exit 1; }
 
 # Sauvegarder la liste des processus PM2 pour qu'ils redémarrent au boot
-sudo -u "$PM2_RUN_USER" pm2 save || { echo "Échec de la sauvegarde PM2. Arrêt du script."; exit 1; }
+sudo -u "$PM2_RUN_USER" /usr/bin/pm2 save || { echo "Échec de la sauvegarde PM2. Arrêt du script."; exit 1; }
 
 echo "Tunnel SSH inversé lancé avec PM2 et configuré pour démarrer au boot."
 
