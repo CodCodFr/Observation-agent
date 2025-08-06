@@ -25,24 +25,24 @@ echo "Date: $(date)"
 
 # Vérification des pré-requis
 if [ "$EUID" -ne 0 ]; then
-    echo "Ce script doit être exécuté avec les privilèges root. Utilisez 'sudo'."
-    exit 1
+    echo "Ce script doit être exécuté avec les privilèges root. Utilisez 'sudo'."
+    exit 1
 fi
 if [ -z "$API_SECRET_FOR_AGENT" ] || [ -z "$VPS_IDENTIFIER" ]; then
-    echo "Erreur : Les arguments API_SECRET et VPS_IDENTIFIER sont manquants."
-    echo "Utilisation: curl ... | sudo bash -s -- \"<API_SECRET>\" \"<VPS_IDENTIFIER>\""
-    exit 1
+    echo "Erreur : Les arguments API_SECRET et VPS_IDENTIFIER sont manquants."
+    echo "Utilisation: curl ... | sudo bash -s -- \"<API_SECRET>\" \"<VPS_IDENTIFIER>\""
+    exit 1
 fi
 
 TUNNEL_RUN_USER=${SUDO_USER:-root}
 HOME_DIR_TUNNEL_USER=$(eval echo "~$TUNNEL_RUN_USER")
 
 if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
+    . /etc/os-release
+    OS=$ID
 else
-    echo "Distribution Linux non détectée. Ne peut pas continuer."
-    exit 1
+    echo "Distribution Linux non détectée. Ne peut pas continuer."
+    exit 1
 fi
 echo "Système d'exploitation détecté: $OS"
 echo "Le tunnel sera exécuté sous l'utilisateur: $TUNNEL_RUN_USER"
@@ -51,25 +51,25 @@ echo "Chemin de base des clés SSH pour le tunnel: $HOME_DIR_TUNNEL_USER/.ssh/"
 # Installation de Docker et OpenSSH Client
 echo "Installation des dépendances (Docker, OpenSSH Client)..."
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des pré-requis APT."; exit 1; }
-    
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
-    
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-    
-    apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io || { echo "Échec de l'installation de Docker CE."; exit 1; }
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y && apt-get install -y ca-certificates curl gnupg openssh-client || { echo "Échec de l'installation des pré-requis APT."; exit 1; }
+    
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    apt-get update -y && apt-get install -y docker-ce docker-ce-cli containerd.io || { echo "Échec de l'installation de Docker CE."; exit 1; }
 elif [[ "$OS" == "centos" || "$OS" == "rhel" || "$OS" == "rocky" ]]; then
-    yum install -y yum-utils device-mapper-persistent-data lvm2 openssh-clients || { echo "Échec de l'installation des pré-requis YUM."; exit 1; }
-    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    yum install -y docker-ce docker-ce-cli containerd.io || { echo "Échec de l'installation de Docker CE."; exit 1; }
-    systemctl start docker
-    systemctl enable docker
+    yum install -y yum-utils device-mapper-persistent-data lvm2 openssh-clients || { echo "Échec de l'installation des pré-requis YUM."; exit 1; }
+    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    yum install -y docker-ce docker-ce-cli containerd.io || { echo "Échec de l'installation de Docker CE."; exit 1; }
+    systemctl start docker
+    systemctl enable docker
 else
-    echo "Installation de Docker non prise en charge pour cette distribution. Veuillez installer Docker manuellement."
-    exit 1
+    echo "Installation de Docker non prise en charge pour cette distribution. Veuillez installer Docker manuellement."
+    exit 1
 fi
 echo "Dépendances essentielles (Docker) installées."
 
@@ -101,10 +101,10 @@ BACKEND_API_URL="https://${YOUR_BACKEND_IP}:${BACKEND_PORT}/agent/register-tunne
 AUTH_TOKEN_FOR_BACKEND=$(echo -n "$API_SECRET_FOR_AGENT" | sha256sum | awk '{print $1}')
 curl_output=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $AUTH_TOKEN_FOR_BACKEND" -d "{\"vpsId\": \"$VPS_IDENTIFIER\", \"publicKey\": \"$PUBLIC_KEY_FOR_TUNNEL\"}" "$BACKEND_API_URL")
 if [ $? -ne 0 ]; then
-    echo "Échec de la requête cURL vers le backend. Réponse: $curl_output"
-    exit 1
+    echo "Échec de la requête cURL vers le backend. Réponse: $curl_output"
+    exit 1
 else
-    echo "Requête cURL envoyée. Réponse: $curl_output"
+    echo "Requête cURL envoyée. Réponse: $curl_output"
 fi
 
 
@@ -133,9 +133,9 @@ Description=SSH Tunnel for VPS Agent
 After=network.target
 
 [Service]
-ExecStartPre=/usr/bin/test -f $SSH_KEY_PATH
-ExecStart=/usr/bin/ssh $SSH_COMMAND_ARGS
-User=$TUNNEL_RUN_USER
+ExecStartPre=/usr/bin/test -f ${SSH_KEY_PATH}
+ExecStart=/usr/bin/ssh ${SSH_COMMAND_ARGS}
+User=${TUNNEL_RUN_USER}
 Restart=always
 RestartSec=10
 
@@ -152,15 +152,15 @@ echo "Tunnel SSH inversé lancé et configuré pour démarrer au boot avec Syste
 # Configuration du pare-feu (UFW)
 echo "Configuration du pare-feu (UFW)..."
 if command -v ufw &> /dev/null; then
-    ufw allow $SSH_PORT/tcp || { echo "Échec de l'ouverture du port SSH dans UFW."; exit 1; }
-    ufw --force enable || { echo "Échec de l'activation de UFW."; exit 1; }
-    echo "UFW configuré. Seul le port SSH ($SSH_PORT) est ouvert pour l'extérieur."
+    ufw allow $SSH_PORT/tcp || { echo "Échec de l'ouverture du port SSH dans UFW."; exit 1; }
+    ufw --force enable || { echo "Échec de l'activation de UFW."; exit 1; }
+    echo "UFW configuré. Seul le port SSH ($SSH_PORT) est ouvert pour l'extérieur."
 else
-    echo "UFW non installé. Ignore la configuration du pare-feu. Veuillez vous assurer que le port SSH est ouvert."
+    echo "UFW non installé. Ignore la configuration du pare-feu. Veuillez vous assurer que le port SSH est ouvert."
 fi
 
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
-    unset DEBIAN_FRONTEND
+    unset DEBIAN_FRONTEND
 fi
 
 echo "--- Processus d'installation terminé ! ---"
