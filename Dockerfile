@@ -19,7 +19,7 @@ COPY . .
 
 # Expose le port sur lequel votre agent écoute à l'intérieur du conteneur
 # C'est le PORT de votre agent Node.js (ex: 3001)
-EXPOSE 3001
+EXPOSE 3000
 
 # Commande pour démarrer l'agent quand le conteneur est lancé
 CMD [ "node", "agent.js" ]
