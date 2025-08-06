@@ -175,12 +175,11 @@ echo "Clé publique envoyée au backend (vérifiez la réponse cURL ci-dessus)."
 echo "Lancement du tunnel SSH inversé avec Systemd (via PM2)..."
 
 # Arrêter et supprimer l'ancien processus PM2 du tunnel s'il existe
-pm2 stop vps-tunnel > /dev/null 2>&1 || true
-pm2 delete vps-tunnel > /dev/null 2>&1 || true
+sudo -u "$PM2_RUN_USER" /usr/bin/pm2 stop vps-tunnel > /dev/null 2>&1 || true
+sudo -u "$PM2_RUN_USER" /usr/bin/pm2 delete vps-tunnel > /dev/null 2>&1 || true
 
 # Configurer Systemd pour PM2. Ceci crée le service pm2-<user>.service
-# Correction : Capture la commande générée et l'exécute dynamiquement
-PM2_SETUP_COMMAND=$(sudo -u "$PM2_RUN_USER" /usr/bin/pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" | tail -n 1)
+PM2_SETUP_COMMAND=$(sudo env PATH=$PATH:/usr/bin /usr/bin/pm2 startup systemd -u "$PM2_RUN_USER" --hp "$HOME_DIR_PM2_USER" | tail -n 1)
 eval "$PM2_SETUP_COMMAND" || { echo "Échec de la configuration du service Systemd. Arrêt du script."; exit 1; }
 
 # Définir les arguments du tunnel SSH
