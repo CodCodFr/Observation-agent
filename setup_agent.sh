@@ -107,11 +107,22 @@ else
     echo "Requête cURL envoyée. Réponse: $curl_output"
 fi
 
+
+# Extract the tunnelPort from the JSON response
+TUNNEL_PORT_GET=$(echo "$curl_output" | jq -r '.tunnelPort')
+
+if [ -z "$TUNNEL_PORT_GET" ] || [ "$TUNNEL_PORT_GET" = "null" ]; then
+    echo "Error: Failed to get a tunnel port from the backend."
+    exit 1
+fi
+
 # Démarrage du tunnel SSH inversé avec Systemd
 echo "Lancement du tunnel SSH inversé avec Systemd..."
 SERVICE_NAME="vps-tunnel.service"
-SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_SSH_IP"
+SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:$TUNNEL_PORT_GET:localhost:$AGENT_PORT -p $SSH_PORT -i $SSH_KEY_PATH -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes $SSH_TUNNEL_USER@$YOUR_SSH_IP"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME"
+
+echo "Tunnel port '$TUNNEL_PORT' registered and configured."
 
 systemctl stop "$SERVICE_NAME" > /dev/null 2>&1 || true
 systemctl disable "$SERVICE_NAME" > /dev/null 2>&1 || true
