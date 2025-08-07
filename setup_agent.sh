@@ -80,6 +80,7 @@ docker rm vps-agent-container > /dev/null 2>&1 || true
 docker pull "$DOCKER_IMAGE_NAME" || { echo "Échec du pull de l'image Docker."; exit 1; }
 
 
+# --- Remplacement de la section Docker Run par Docker Swarm ---
 echo "Démarrage et configuration de l'agent Docker en tant que service Swarm..."
 
 # Initialisation du Swarm si ce n'est pas déjà fait
@@ -88,11 +89,17 @@ docker info | grep "Swarm: active" &> /dev/null || docker swarm init || { echo "
 # Nettoyage de l'ancien service si il existe
 docker service rm observation-agent > /dev/null 2>&1 || true
 
+# On ajoute un délai pour laisser le temps au service d'être complètement supprimé
+echo "Délai de 5 secondes pour permettre la suppression du service..."
+sleep 5
+
 # Création du service Swarm
+# NOTE : On utilise --mode=global pour garantir une seule tâche par nœud, évitant les conflits de ports
 # NOTE : On supprime --publish car --network host expose déjà le port
 docker service create \
   --name observation-agent \
   --network host \
+  --mode global \
   --env API_SECRET="$API_SECRET_FOR_AGENT" \
   --env PORT="$AGENT_PORT" \
   "$DOCKER_IMAGE_NAME" || { echo "Échec de la création du service Docker Swarm."; exit 1; }
