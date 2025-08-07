@@ -3,7 +3,7 @@
 # --- Configuration du Script de Setup ---
 # URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
 # Assurez-vous que cette image est publique sur GHCR.
-DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent-image:latest"
+DOCKER_IMAGE_NAME="ghcr.io/gaetanse/observation-agent-image:latest"
 
 AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
 YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
