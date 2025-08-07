@@ -3,7 +3,7 @@
 # --- Configuration du Script de Setup ---
 # URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
 # Assurez-vous que cette image est publique sur GHCR.
-DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
+DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent-image:latest"
 
 AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
 YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
@@ -78,8 +78,30 @@ echo "Démarrage et configuration de l'agent Docker..."
 docker stop vps-agent-container > /dev/null 2>&1 || true
 docker rm vps-agent-container > /dev/null 2>&1 || true
 docker pull "$DOCKER_IMAGE_NAME" || { echo "Échec du pull de l'image Docker."; exit 1; }
-docker run -d --restart=always --name vps-agent-container -e API_SECRET="$API_SECRET_FOR_AGENT" -e PORT="$AGENT_PORT" -p 127.0.0.1:"$AGENT_PORT":"$AGENT_PORT" "$DOCKER_IMAGE_NAME" || { echo "Échec du lancement du conteneur Docker."; exit 1; }
-echo "Conteneur Docker de l'agent lancé."
+
+
+# --- Remplacement de la section Docker Run par Docker Swarm ---
+echo "Démarrage et configuration de l'agent Docker en tant que service Swarm..."
+
+# Initialisation du Swarm si ce n'est pas déjà fait
+docker info | grep "Swarm: active" &> /dev/null || docker swarm init || { echo "Échec de l'initialisation de Swarm."; exit 1; }
+
+# Nettoyage de l'ancien service si il existe
+docker service rm observation-agent > /dev/null 2>&1 || true
+
+# Création du service Swarm
+docker service create \
+  --name observation-agent \
+  --network host \
+  --env API_SECRET="$API_SECRET_FOR_AGENT" \
+  --env PORT="$AGENT_PORT" \
+  --publish published="$AGENT_PORT",target="$AGENT_PORT" \
+  "$DOCKER_IMAGE_NAME" || { echo "Échec de la création du service Docker Swarm."; exit 1; }
+
+echo "Service Docker Swarm de l'agent lancé."
+
+#docker run -d --restart=always --name vps-agent-container -e API_SECRET="$API_SECRET_FOR_AGENT" -e PORT="$AGENT_PORT" -p 127.0.0.1:"$AGENT_PORT":"$AGENT_PORT" "$DOCKER_IMAGE_NAME" || { echo "Échec du lancement du conteneur Docker."; exit 1; }
+#echo "Conteneur Docker de l'agent lancé."
 
 # Génération de la paire de clés SSH pour le tunnel
 echo "Génération de la paire de clés SSH pour le tunnel..."
