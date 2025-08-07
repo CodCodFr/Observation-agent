@@ -80,6 +80,8 @@ docker rm vps-agent-container > /dev/null 2>&1 || true
 docker pull "$DOCKER_IMAGE_NAME" || { echo "Échec du pull de l'image Docker."; exit 1; }
 
 
+#!/bin/bash
+
 # --- Remplacement de la section Docker Run par Docker Swarm ---
 echo "Démarrage et configuration de l'agent Docker en tant que service Swarm..."
 
@@ -93,6 +95,16 @@ docker service rm observation-agent > /dev/null 2>&1 || true
 echo "Délai de 5 secondes pour permettre la suppression du service..."
 sleep 5
 
+# --- Nouvelle étape : Vérification et libération du port avant de démarrer le service ---
+echo "Vérification de la disponibilité du port $AGENT_PORT sur l'hôte..."
+if lsof -i:$AGENT_PORT | grep LISTEN; then
+    echo "Le port $AGENT_PORT est déjà utilisé. Il est possible qu'un ancien processus l'ait gardé."
+    echo "Essayez de trouver le PID avec 'lsof' et de le tuer avec 'kill'."
+    lsof -i:$AGENT_PORT
+    echo "Échec de la création du service en raison d'un conflit de port."
+    exit 1
+fi
+
 # Création du service Swarm
 # NOTE : On utilise --mode=global pour garantir une seule tâche par nœud, évitant les conflits de ports
 # NOTE : On supprime --publish car --network host expose déjà le port
@@ -105,6 +117,7 @@ docker service create \
   "$DOCKER_IMAGE_NAME" || { echo "Échec de la création du service Docker Swarm."; exit 1; }
 
 echo "Service Docker Swarm de l'agent lancé."
+
 
 #docker run -d --restart=always --name vps-agent-container -e API_SECRET="$API_SECRET_FOR_AGENT" -e PORT="$AGENT_PORT" -p 127.0.0.1:"$AGENT_PORT":"$AGENT_PORT" "$DOCKER_IMAGE_NAME" || { echo "Échec du lancement du conteneur Docker."; exit 1; }
 #echo "Conteneur Docker de l'agent lancé."
