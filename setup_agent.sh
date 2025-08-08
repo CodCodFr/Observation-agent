@@ -160,7 +160,7 @@ fi
 # Démarrage du tunnel SSH inversé avec Systemd
 echo "Lancement du tunnel SSH inversé avec Systemd..."
 SERVICE_NAME="vps-tunnel.service"
-SSH_COMMAND_ARGS="-N -T -R 127.0.0.1:${TUNNEL_PORT_GET}:localhost:${AGENT_PORT} -p ${SSH_PORT} -i ${SSH_KEY_PATH} -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes ${SSH_TUNNEL_USER}@${YOUR_SSH_IP}"
+SSH_COMMAND_ARGS="-N -T -R 0.0.0.0:${TUNNEL_PORT_GET}:localhost:${AGENT_PORT} -p ${SSH_PORT} -i ${SSH_KEY_PATH} -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o BatchMode=yes ${SSH_TUNNEL_USER}@${YOUR_SSH_IP}"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}"
 
 echo "Tunnel port '${TUNNEL_PORT_GET}' registered and configured."
