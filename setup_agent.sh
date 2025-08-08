@@ -92,8 +92,8 @@ docker info | grep "Swarm: active" &> /dev/null || docker swarm init || { echo "
 docker service rm observation-agent > /dev/null 2>&1 || true
 
 # On ajoute un délai pour laisser le temps au service d'être complètement supprimé
-echo "Délai de 5 secondes pour permettre la suppression du service..."
-sleep 5
+echo "Délai de 10 secondes pour permettre la suppression du service..."
+sleep 10
 
 # --- Nouvelle étape : Vérification et libération du port avant de démarrer le service ---
 echo "Vérification de la disponibilité du port $AGENT_PORT sur l'hôte..."
