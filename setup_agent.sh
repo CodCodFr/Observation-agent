@@ -24,20 +24,8 @@ fi
 # Parse les données JSON pour créer des variables
 eval "$(echo "$CONFIG_DATA" | jq -r 'to_entries[] | "export \(.key)=\"\(.value)\""')"
 
-# --- Configuration du Script de Setup ---
-# URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
-# Assurez-vous que cette image est publique sur GHCR.
-DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
-
-#AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-#YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
-#YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal
-#SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
-#BACKEND_PORT="7999" # Port de votre backend Node.js
-#SSH_PORT="22326" # Le port SSH de votre serveur backend
-
 # Récupérer les arguments passés par la commande curl
-API_SECRET_FOR_AGENT=$API_SECRET_FOR_AGENT
+API_SECRET_FOR_AGENT=$AGENT_AUTH_TOKEN
 VPS_IDENTIFIER="$2"
 
 # --- Configuration du Log ---
