@@ -1,19 +1,43 @@
 #!/bin/bash
 
+# Récupère l'URL d'installation passée en argument
+INSTALL_URL="$1"
+
+# Vérifie si l'URL est valide
+if [[ -z "$INSTALL_URL" ]]; then
+    echo "Erreur : URL d'installation manquante. Exécution interrompue."
+    exit 1
+fi
+
+echo "Récupération sécurisée des données de configuration..."
+
+# Récupère les données depuis le serveur de provisionnement
+CONFIG_DATA=$(curl -s "$INSTALL_URL")
+
+# Vérifie si la récupération a réussi
+if [[ "$CONFIG_DATA" != "{"* ]]; then
+    echo "Erreur : Échec de la récupération des données ou token invalide."
+    echo "Message du serveur : $CONFIG_DATA"
+    exit 1
+fi
+
+# Parse les données JSON pour créer des variables
+eval "$(echo "$CONFIG_DATA" | jq -r 'to_entries[] | "export \(.key)=\"\(.value)\""')"
+
 # --- Configuration du Script de Setup ---
 # URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
 # Assurez-vous que cette image est publique sur GHCR.
 DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
-AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
-YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
-YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal
-SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
-BACKEND_PORT="7999" # Port de votre backend Node.js
-SSH_PORT="22326" # Le port SSH de votre serveur backend
+#AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
+#YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
+#YOUR_BACKEND_IP="codcod.fr" # IP publique de votre serveur principal
+#SSH_TUNNEL_USER="tunnel_user" # Utilisateur SSH créé sur votre backend pour le tunnel
+#BACKEND_PORT="7999" # Port de votre backend Node.js
+#SSH_PORT="22326" # Le port SSH de votre serveur backend
 
 # Récupérer les arguments passés par la commande curl
-API_SECRET_FOR_AGENT="$1"
+API_SECRET_FOR_AGENT=$API_SECRET_FOR_AGENT
 VPS_IDENTIFIER="$2"
 
 # --- Configuration du Log ---
