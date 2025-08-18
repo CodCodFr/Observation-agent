@@ -3,7 +3,7 @@
 # --- Configuration du Script de Setup ---
 # URL de l'image Docker de votre agent sur GitHub Container Registry (GHCR)
 # Assurez-vous que cette image est publique sur GHCR.
-DOCKER_IMAGE_NAME="ghcr.io/gaetanse/observation-agent-image:latest"
+DOCKER_IMAGE_NAME="ghcr.io/codcodfr/observation-agent:latest"
 
 AGENT_PORT="3000" # Port sur lequel l'agent écoutera DANS le conteneur Docker
 YOUR_SSH_IP="152.53.104.19" # IP publique de votre serveur principal
@@ -92,17 +92,29 @@ docker info | grep "Swarm: active" &> /dev/null || docker swarm init || { echo "
 docker service rm observation-agent > /dev/null 2>&1 || true
 
 # On ajoute un délai pour laisser le temps au service d'être complètement supprimé
-echo "Délai de 10 secondes pour permettre la suppression du service..."
-sleep 10
+echo "Délai de 5 secondes pour permettre la suppression du service..."
+sleep 5
 
-# --- Nouvelle étape : Vérification et libération du port avant de démarrer le service ---
-echo "Vérification de la disponibilité du port $AGENT_PORT sur l'hôte..."
-if lsof -i:$AGENT_PORT | grep LISTEN; then
-    echo "Le port $AGENT_PORT est déjà utilisé. Il est possible qu'un ancien processus l'ait gardé."
-    echo "Essayez de trouver le PID avec 'lsof' et de le tuer avec 'kill'."
-    lsof -i:$AGENT_PORT
-    echo "Échec de la création du service en raison d'un conflit de port."
-    exit 1
+# --- Nouvelle étape : Vérification et libération automatique du port ---
+echo "Vérification de la disponibilité du port $AGENT_PORT sur l'hôte et libération si nécessaire..."
+
+# On récupère le PID du processus en écoute sur le port, en utilisant 'lsof -t'.
+# L'option '-t' permet de n'afficher que le PID.
+PID=$(sudo lsof -t -i:$AGENT_PORT)
+
+if [ ! -z "$PID" ]; then
+    echo "Le port $AGENT_PORT est déjà utilisé par le processus avec le PID $PID."
+    echo "Arrêt automatique du processus..."
+    
+    # Utilisation de 'sudo kill -9' pour forcer l'arrêt du processus.
+    # Le 'sudo' est nécessaire car le processus peut être lancé par un autre utilisateur (root).
+    sudo kill -9 $PID
+    
+    echo "Processus $PID arrêté."
+    # On ajoute un court délai pour s'assurer que le port est complètement libéré.
+    sleep 2
+else
+    echo "Le port $AGENT_PORT est disponible."
 fi
 
 # Création du service Swarm
@@ -203,6 +215,33 @@ fi
 if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     unset DEBIAN_FRONTEND
 fi
+
+# ================================================================
+# Section ajoutée : Configuration du script de mise à jour automatique
+# ================================================================
+
+echo "--- Démarrage de la configuration de la mise à jour automatique ---"
+UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/codcodfr/observation-agent/main/update_agent.sh"
+UPDATE_SCRIPT_PATH="/usr/local/bin/update_agent.sh"
+
+# Télécharge le script de mise à jour depuis GitHub
+echo "Téléchargement du script de mise à jour vers ${UPDATE_SCRIPT_PATH}..."
+curl -sL "$UPDATE_SCRIPT_URL" | sudo tee "$UPDATE_SCRIPT_PATH" > /dev/null
+
+# Rend le script exécutable
+sudo chmod +x "$UPDATE_SCRIPT_PATH"
+echo "Script de mise à jour rendu exécutable."
+
+# Ajoute la tâche Cron pour l'exécution toutes les 5 minutes
+echo "Ajout de la tâche Cron pour exécuter le script toutes les 5 minutes..."
+CRON_JOB="*/5 * * * * ${UPDATE_SCRIPT_PATH}"
+# Vérifie si la tâche existe déjà pour éviter les doublons
+(sudo crontab -l 2>/dev/null | grep -F "$UPDATE_SCRIPT_PATH") || (echo "$CRON_JOB" | sudo crontab -)
+
+echo "Tâche Cron ajoutée avec succès."
+echo "--- Fin de la configuration de la mise à jour automatique ---"
+
+# ================================================================
 
 echo "--- Processus d'installation terminé ! ---"
 echo "Vérifiez les logs du tunnel Systemd: journalctl -u ${SERVICE_NAME} -n 100"

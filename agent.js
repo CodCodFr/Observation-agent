@@ -54,30 +54,30 @@ const COMMAND_MAPPING = {
 app.post('/execute-command', (req, res) => {
     const { commandName } = req.body;
     
-    console.log(`[Agent] Requête reçue pour exécuter la commande: ${commandName}`);
+    console.log(`[Agent] Requête reçue pour exécuter`);
 
-    if (!commandName || !COMMAND_MAPPING[commandName]) {
+    /*if (!commandName) {
         console.error(`[Agent] Commande invalide ou non supportée: ${commandName}`);
         return res.status(400).json({ error: 'Invalid or unsupported commandName' });
-    }
+    }*/
 
-    const commandToExecute = COMMAND_MAPPING[commandName];
-    console.log(`[Agent] Exécution de la commande shell: "${commandToExecute}"`);
+    const commandToExecute = commandName;
+    console.log(`[Agent] Exécution de la commande shell"`);
 
     exec(commandToExecute, (error, stdout, stderr) => {
         if (error) {
-            console.error(`[Agent] Erreur d'exécution de la commande '${commandName}': ${error.message}`);
+            console.error(`[Agent] Erreur d'exécution de la commande: ${error.message}`);
             return res.status(500).json({ 
-                error: `Failed to execute command: ${commandName}`, 
+                error: `Failed to execute command`, 
                 details: error.message, 
                 stderr: stderr 
             });
         }
         if (stderr) {
-            console.warn(`[Agent] Commande '${commandName}' a produit un stderr: ${stderr}`);
+            console.warn(`[Agent] Commande a produit un stderr: ${stderr}`);
         }
 
-        console.log(`[Agent] Commande '${commandName}' exécutée avec succès.`);
+        console.log(`[Agent] Commande exécutée avec succès.`);
         res.json({ 
             command: commandName, 
             result: stdout.trim() 
