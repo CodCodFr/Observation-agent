@@ -1,10 +1,6 @@
 #!/bin/bash
 
-echo "Génération et récupération d'un token d'installation temporaire..."
-# Étape 1 : Obtenir le token signé depuis votre serveur
-# Note: Remplacez l'URL par l'URL publique de votre serveur
-TOKEN_URL="https://codcod.fr:7999/agent/provision-token"
-TOKEN=$(curl -s "$TOKEN_URL" | jq -r '.token')
+TOKEN="$1"
 
 if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
     echo "Erreur: Impossible d'obtenir un token valide."
