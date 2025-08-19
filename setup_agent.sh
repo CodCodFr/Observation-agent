@@ -1,18 +1,19 @@
 #!/bin/bash
 
-# Récupère l'URL d'installation passée en argument
-INSTALL_URL="$1"
+echo "Génération et récupération d'un token d'installation temporaire..."
+# Étape 1 : Obtenir le token signé depuis votre serveur
+# Note: Remplacez l'URL par l'URL publique de votre serveur
+TOKEN_URL="https://codcod.fr:7999/agent/provision-token"
+TOKEN=$(curl -s "$TOKEN_URL" | jq -r '.token')
 
-# Vérifie si l'URL est valide
-if [[ -z "$INSTALL_URL" ]]; then
-    echo "Erreur : URL d'installation manquante. Exécution interrompue."
+if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+    echo "Erreur: Impossible d'obtenir un token valide."
     exit 1
 fi
 
-echo "Récupération sécurisée des données de configuration..."
-
-# Récupère les données depuis le serveur de provisionnement
-CONFIG_DATA=$(curl -s "$INSTALL_URL")
+echo "Token récupéré. Récupération des données de configuration..."
+# Étape 2 : Envoyer le token pour obtenir la configuration
+CONFIG_DATA=$(curl -s -X POST -H "Content-Type: application/json" -d "{\"token\":\"$TOKEN\"}" "https://codcod.fr:7999/agent/provision")
 
 # Vérifie si la récupération a réussi
 if [[ "$CONFIG_DATA" != "{"* ]]; then
