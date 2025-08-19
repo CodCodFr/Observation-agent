@@ -23,7 +23,7 @@ eval "$(echo "$CONFIG_DATA" | jq -r 'to_entries[] | "export \(.key)=\"\(.value)\
 
 # Récupérer les arguments passés par la commande curl
 API_SECRET_FOR_AGENT=$AGENT_AUTH_TOKEN
-VPS_IDENTIFIER="$1"
+VPS_IDENTIFIER="$2"
 
 # --- Configuration du Log ---
 LOG_FILE="/var/log/vps-agent-setup.log"
