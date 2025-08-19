@@ -63,7 +63,7 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" ]]; then
     apt-get update -y && apt-get install -y ca-certificates curl gnupg openssh-client jq || { echo "Échec de l'installation des pré-requis APT."; exit 1; }
 
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes || { echo "Échec du téléchargement et de l'installation de la clé GPG de Docker."; exit 1; }
     chmod a+r /etc/apt/keyrings/docker.gpg
 
 
